@@ -160,6 +160,13 @@ input:focus,textarea:focus{outline:2px solid var(--green);outline-offset:0;borde
 .act.wrong .nm{color:var(--red-ink)}
 .act.wrong .mk{color:var(--red);font-size:18px}
 .reset-btn{align-self:flex-start;font-weight:500;font-size:15px;cursor:pointer;background:transparent;border:1px solid var(--line2);color:var(--muted);padding:9px 20px;border-radius:10px}
+/* 개입 단계 비채점 성찰칸 — 메모리 전용, 저장 안 함 */
+.reflect{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:18px}
+.reflect-label{font-size:15px;font-weight:700;color:var(--green-dk)}
+.reflect-label .opt{font-weight:500;color:var(--muted)}
+.reflect-cue{font-size:14px;color:var(--muted2);line-height:1.5}
+.reflect-area{width:100%;font-size:16px;line-height:1.5;padding:12px 14px;border:1px solid var(--line2);border-radius:12px;background:#fff;resize:vertical;min-height:72px}
+.reflect-help{font-size:12.5px;color:var(--faint2)}
 
 /* 에디터 */
 .editor{padding:clamp(20px,3.5vw,46px);max-width:1280px}
@@ -279,13 +286,13 @@ function blankForm(){ return { subject:'', title:'', subtitle:'', interveneCue:'
 var state={ screen:'gallery', custom:[], buildMode:'anchor',
   activeId:null, preview:null, editorId:null, form:blankForm(),
   toast:null, error:null,
-  iphase:'build', isel:null, iplaced:{원인:null,과정:null,결과:null}, ishake:null, iresults:{}, ihint:null };
+  iphase:'build', isel:null, iplaced:{원인:null,과정:null,결과:null}, ishake:null, iresults:{}, ihint:null, ireflect:'' };
 
 // 구성 단계 초기 상태 — 교사 설정(buildMode)에 따라 원인을 고정 앵커로 미리 채움 (ISS-04)
 function freshInquiry(){
   var ip={원인:null,과정:null,결과:null};
   if(state.buildMode==='anchor') ip['원인']='cause';
-  return { iphase:'build', isel:null, iplaced:ip, ishake:null, iresults:{}, ihint:null };
+  return { iphase:'build', isel:null, iplaced:ip, ishake:null, iresults:{}, ihint:null, ireflect:'' };
 }
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
@@ -310,7 +317,7 @@ function setState(patch){ for(var k in patch) state[k]=patch[k]; render(); }
 // ---- 내비게이션 ----
 function goGallery(){ setState({screen:'gallery', error:null}); }
 function openScenario(id){ var f=freshInquiry(); state.screen='inquiry'; state.activeId=id; state.preview=null; state.error=null;
-  state.iphase=f.iphase; state.isel=f.isel; state.iplaced=f.iplaced; state.ishake=f.ishake; state.iresults=f.iresults; state.ihint=f.ihint; render(); }
+  state.iphase=f.iphase; state.isel=f.isel; state.iplaced=f.iplaced; state.ishake=f.ishake; state.iresults=f.iresults; state.ihint=f.ihint; state.ireflect=f.ireflect; render(); }
 function newEditor(){ setState({screen:'editor', editorId:null, form:blankForm(), error:null, preview:null}); }
 function editScenario(id){ var s=byId(id); if(!s) return; var get=function(r){ return elOf(s,r)||{icon:'',name:''}; };
   setState({ screen:'editor', editorId:id, error:null, form:{
@@ -325,13 +332,14 @@ function iPlace(role){ if(!state.isel || state.iplaced[role]) return;
   if(sl.want===state.isel){ state.iplaced[role]=state.isel; state.isel=null; render(); }
   else { state.ishake=role; state.isel=null; render(); setTimeout(function(){ state.ishake=null; render(); },600); } }
 function iGoIntervene(){ setState({iphase:'intervene'}); }
-function iReset(){ var f=freshInquiry(); state.iphase=f.iphase; state.isel=f.isel; state.iplaced=f.iplaced; state.ishake=f.ishake; state.iresults=f.iresults; state.ihint=f.ihint; render(); }
+function iReset(){ var f=freshInquiry(); state.iphase=f.iphase; state.isel=f.isel; state.iplaced=f.iplaced; state.ishake=f.ishake; state.iresults=f.iresults; state.ihint=f.ihint; state.ireflect=f.ireflect; render(); }
 function iChoose(id){ var sc=activeScenario(); if(!sc) return; var a=sc.actions.filter(function(x){return x.id===id;})[0]; if(!a) return;
   if(state.iresults[id]==='correct') return;
   if(a.ok){ state.iresults[id]='correct'; state.ihint=null; } else { state.iresults[id]='wrong'; state.ihint=id; } render(); }
 
 // ---- 에디터 동작 ----
 function onField(token,val){ var f=state.form;
+  if(token==='reflect'){ state.ireflect=val; return; }  // 성찰칸 — 재렌더 없이 메모리에만 보관(포커스 유지)
   if(token==='subject') f.subject=val;
   else if(token==='title') f.title=val;
   else if(token==='subtitle') f.subtitle=val;
@@ -374,7 +382,7 @@ function saveForm(){ var err=validate(); if(err){ state.error=err; refreshPrevie
   setState({screen:'gallery', error:null}); showToast('‘'+sc.title+'’ 저장 완료'); }
 function playForm(){ var err=validate(); if(err){ state.error=err; refreshPreview(); return; }
   var f=freshInquiry(); state.screen='inquiry'; state.preview=buildFromForm('preview'); state.activeId=null; state.error=null;
-  state.iphase=f.iphase; state.isel=f.isel; state.iplaced=f.iplaced; state.ishake=f.ishake; state.iresults=f.iresults; state.ihint=f.ihint; render(); }
+  state.iphase=f.iphase; state.isel=f.isel; state.iplaced=f.iplaced; state.ishake=f.ishake; state.iresults=f.iresults; state.ihint=f.ihint; state.ireflect=f.ireflect; render(); }
 function exportForm(){ var err=validate(); if(err){ state.error=err; refreshPreview(); return; } download(buildFromForm('export')); }
 function exportScenario(id){ var s=byId(id); if(s) download(s); }
 function download(obj){
@@ -565,10 +573,17 @@ function interveneBodyHTML(sc){
       +'<span class="ic">'+esc(a.icon)+'</span><span class="nm">'+esc(a.name)+'</span>'+mk+'</div>';
   }).join('');
 
+  var reflect='<div class="reflect">'
+    +'<label class="reflect-label" for="cce-reflect">🧠 내 생각 <span class="opt">(선택)</span></label>'
+    +'<div class="reflect-cue">왜 이 지점을 끊으면 결과가 바뀔까요? 내가 생각한 또 다른 끊는 방법도 좋아요.</div>'
+    +'<textarea id="cce-reflect" class="reflect-area" data-field="reflect" rows="3" placeholder="여기에 내 생각을 적어 보세요">'+esc(state.ireflect)+'</textarea>'
+    +'<div class="reflect-help">이름 대신 ‘나’라고 적어요 · 적은 내용은 저장되지 않아요.</div></div>';
+
   return '<div style="display:flex;flex-direction:column;gap:24px">'
     +'<div class="cue">'+esc(sc.interveneCue||'고리를 끊을 방법을 모두 찾아보세요.')+'</div>'
     +flow+progress+hint
     +'<div class="acts">'+acts+'</div>'
+    +reflect
     +'<button class="reset-btn" data-act="ireset">↺ 처음부터</button></div>';
 }
 
