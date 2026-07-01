@@ -100,6 +100,9 @@ input:focus,textarea:focus{outline:2px solid var(--green);outline-offset:0;borde
 /* 구성 단계 */
 .chain{display:flex;align-items:center;justify-content:center;padding:6px 0;flex-wrap:wrap}
 .slot-wrap{display:flex;align-items:center}
+/* 수렴형(fan-in) — 여러 원인을 세로로 쌓아 한 결과로 모음 */
+.cause-col{display:flex;flex-direction:column;gap:16px;align-items:center}
+.pv-cause-col{display:flex;flex-direction:column;gap:8px;align-items:center}
 .slot{cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:14px;width:188px;position:relative}
 .slot.locked{cursor:default}
 .circle{width:128px;height:128px;border-radius:50%;display:flex;align-items:center;justify-content:center}
@@ -275,23 +278,30 @@ var DEFAULTS=[
     interveneCue:'오해가 퍼지지 않게 — 고리를 끊을 행동을 모두 찾아보세요.',
     elements:[{id:'cause',icon:'📰',name:'자극적인 정보'},{id:'proc',icon:'🔁',name:'무비판 공유'},{id:'result',icon:'😵',name:'오해가 퍼짐'}],
     actions:[{id:'s1',icon:'🔍',name:'출처 확인하기',ok:true},{id:'s2',icon:'✋',name:'공유 멈추기',ok:true},{id:'s3',icon:'🧠',name:'사실인지 따져보기',ok:true},{id:'s4',icon:'💬',name:'바로잡는 댓글',ok:true},{id:'t1',icon:'😆',name:'재밌으니까 일단 공유',ok:false,hint:'재미만 보고 공유하면 거짓 정보가 더 빨리 퍼져요.'},{id:'t2',icon:'👍',name:'확인 없이 좋아요',ok:false,hint:'확인 없이 반응하면 자극적인 정보가 더 눈에 띄게 돼요.'}] },
+  { id:'water', subject:'생태', title:'물이 아파요 고리', subtitle:'수질오염 (수렴형 · 5~6학년)',
+    interveneCue:'세 가지 원인이 한 하천으로 모여 물을 오염시켜요 — 이 고리를 끊을 행동을 모두 찾아보세요.',
+    leverageCue:'원인이 셋이나 돼요. 하나만 막을까요, 셋이 모두 지나는 길목을 막을까요? 어디를 끊는 것이 가장 힘이 셀지 생각해 보세요.',
+    elements:[{id:'cause',icon:'🧼',name:'생활 하수 (세제·음식물)'},{id:'cause2',icon:'🏭',name:'공장 폐수'},{id:'cause3',icon:'🌾',name:'농약·비료 흘러듦'},{id:'proc',icon:'💧',name:'오염 물질이 하천으로 흘러듦'},{id:'result',icon:'🐟',name:'물고기와 물속 생태계가 병듦'}],
+    actions:[{id:'s1',icon:'🧽',name:'세제 적게 쓰기',ok:true},{id:'s2',icon:'🍚',name:'음식물 찌꺼기 안 버리기',ok:true},{id:'s3',icon:'🏞️',name:'하천 정화 활동 참여하기',ok:true},{id:'s4',icon:'📣',name:'정화 시설 갖추도록 목소리 내기',ok:true},{id:'t1',icon:'🤷',name:'나 하나쯤은 괜찮아',ok:false,hint:'모두가 그렇게 생각하면 하수도, 폐수도, 농약도 그대로 흘러가요. 작은 실천이 모여야 고리가 끊겨요.'},{id:'t2',icon:'🛒',name:'생수 사 마시기',ok:false,hint:'생수는 내가 더러운 물을 피하는 것일 뿐, 하천으로 흘러드는 오염은 그대로예요. 오히려 플라스틱 쓰레기가 늘어요.'},{id:'t3',icon:'🌿',name:'‘친환경’ 세제니까 마음껏 많이 쓰기',ok:false,hint:'‘친환경’이라도 많이 쓰면 하천으로 흘러드는 양이 늘어요. 친환경 표시가 ‘오염 0’을 뜻하지는 않아요.'}] },
 ];
 
-var SLOTS=[{role:'원인',want:'cause'},{role:'과정',want:'proc'},{role:'결과',want:'result'}];
-
-function blankForm(){ return { subject:'', title:'', subtitle:'', interveneCue:'',
-  cause:{icon:'',name:''}, proc:{icon:'',name:''}, result:{icon:'',name:''},
+function blankForm(){ return { subject:'', title:'', subtitle:'', interveneCue:'', leverageCue:'',
+  causes:[{icon:'',name:''}], proc:{icon:'',name:''}, result:{icon:'',name:''},
   actions:[{icon:'',name:'',ok:true,hint:''},{icon:'',name:'',ok:true,hint:''},{icon:'',name:'',ok:false,hint:''}] }; }
 
 var state={ screen:'gallery', custom:[], buildMode:'anchor',
   activeId:null, preview:null, editorId:null, form:blankForm(),
   toast:null, error:null,
-  iphase:'build', isel:null, iplaced:{원인:null,과정:null,결과:null}, ishake:null, iresults:{}, ihint:null, ireflect:'' };
+  iphase:'build', isel:null, iplaced:{}, ishake:null, iresults:{}, ihint:null, ireflect:'' };
 
-// 구성 단계 초기 상태 — 교사 설정(buildMode)에 따라 원인을 고정 앵커로 미리 채움 (ISS-04)
-function freshInquiry(){
-  var ip={원인:null,과정:null,결과:null};
-  if(state.buildMode==='anchor') ip['원인']='cause';
+// 구성 단계 초기 상태 — 시나리오의 원인 개수만큼 슬롯을 만들고, 앵커면 원인 슬롯을 전부 채움 (ISS-04 + 수렴형)
+function freshInquiry(sc){
+  var ip={}, slots=slotsOf(sc);
+  slots.forEach(function(s){ ip[s.id]=null; });
+  if(state.buildMode==='anchor'){
+    var causes=causesOf(sc), ci=0;
+    slots.forEach(function(s){ if(s.role==='cause'){ ip[s.id]=causes[ci].id; ci++; } });
+  }
   return { iphase:'build', isel:null, iplaced:ip, ishake:null, iresults:{}, ihint:null, ireflect:'' };
 }
 
@@ -309,6 +319,14 @@ function byId(id){ return allScenarios().filter(function(s){return s.id===id;})[
 function isCustom(id){ return !DEFAULTS.some(function(d){return d.id===id;}); }
 function activeScenario(){ return state.preview || byId(state.activeId) || null; }
 function elOf(sc,id){ return sc.elements.filter(function(e){return e.id===id;})[0]; }
+// 역할 추론(id 기반) — cause/cause2/cause3 → 원인, proc → 과정, result → 결과. 기존 단선 JSON과 하위 호환
+function roleOf(id){ return id==='proc'?'proc':(id==='result'?'result':'cause'); }
+function causesOf(sc){ return sc.elements.filter(function(e){return roleOf(e.id)==='cause';}); }
+function slotsOf(sc){ var slots=[];
+  causesOf(sc).forEach(function(c,i){ slots.push({id:'원인'+(i+1),role:'cause',label:'원인'}); });
+  slots.push({id:'과정',role:'proc',label:'과정'}); slots.push({id:'결과',role:'result',label:'결과'}); return slots; }
+// 배치 후 포커스 반환 — 다음 빈 슬롯 → 없으면 트레이 첫 카드 → 없으면 개입 버튼
+function focusNextBuild(){ var n=$app.querySelector('[data-act="iplace"]')||$app.querySelector('.tray [data-act="iselect"]')||$app.querySelector('[data-act="intervene"]'); if(n&&n.focus) n.focus(); }
 
 var toastTimer;
 function showToast(msg){ state.toast=msg; render(); clearTimeout(toastTimer); toastTimer=setTimeout(function(){ state.toast=null; render(); },2700); }
@@ -316,23 +334,25 @@ function setState(patch){ for(var k in patch) state[k]=patch[k]; render(); }
 
 // ---- 내비게이션 ----
 function goGallery(){ setState({screen:'gallery', error:null}); }
-function openScenario(id){ var f=freshInquiry(); state.screen='inquiry'; state.activeId=id; state.preview=null; state.error=null;
+function openScenario(id){ var sc=byId(id); if(!sc) return; var f=freshInquiry(sc); state.screen='inquiry'; state.activeId=id; state.preview=null; state.error=null;
   state.iphase=f.iphase; state.isel=f.isel; state.iplaced=f.iplaced; state.ishake=f.ishake; state.iresults=f.iresults; state.ihint=f.ihint; state.ireflect=f.ireflect; render(); }
 function newEditor(){ setState({screen:'editor', editorId:null, form:blankForm(), error:null, preview:null}); }
 function editScenario(id){ var s=byId(id); if(!s) return; var get=function(r){ return elOf(s,r)||{icon:'',name:''}; };
+  var causes=causesOf(s).map(function(c){ return {icon:c.icon||'',name:c.name||''}; }); if(!causes.length) causes=[{icon:'',name:''}];
   setState({ screen:'editor', editorId:id, error:null, form:{
-    subject:s.subject||'', title:s.title||'', subtitle:s.subtitle||'', interveneCue:s.interveneCue||'',
-    cause:{icon:get('cause').icon,name:get('cause').name}, proc:{icon:get('proc').icon,name:get('proc').name}, result:{icon:get('result').icon,name:get('result').name},
+    subject:s.subject||'', title:s.title||'', subtitle:s.subtitle||'', interveneCue:s.interveneCue||'', leverageCue:s.leverageCue||'',
+    causes:causes, proc:{icon:get('proc').icon,name:get('proc').name}, result:{icon:get('result').icon,name:get('result').name},
     actions:(s.actions||[]).map(function(a){ return {icon:a.icon||'',name:a.name||'',ok:!!a.ok,hint:a.hint||''}; }) } }); }
 
 // ---- 구성 단계 동작 ----
 function iSelect(id){ state.isel=(state.isel===id?null:id); render(); }
-function iPlace(role){ if(!state.isel || state.iplaced[role]) return;
-  var sl=SLOTS.filter(function(x){return x.role===role;})[0];
-  if(sl.want===state.isel){ state.iplaced[role]=state.isel; state.isel=null; render(); }
-  else { state.ishake=role; state.isel=null; render(); setTimeout(function(){ state.ishake=null; render(); },600); } }
+function iPlace(slotId){ if(!state.isel || state.iplaced[slotId]) return;
+  var sc=activeScenario(); var slot=slotsOf(sc).filter(function(s){return s.id===slotId;})[0]; if(!slot) return;
+  var el=elOf(sc,state.isel);  // 역할 기준 매칭 — 원인 카드는 빈 원인 슬롯 아무 곳에나(위치 비의존)
+  if(el && roleOf(el.id)===slot.role){ state.iplaced[slotId]=state.isel; state.isel=null; render(); focusNextBuild(); }
+  else { state.ishake=slotId; state.isel=null; render(); setTimeout(function(){ state.ishake=null; render(); },600); } }
 function iGoIntervene(){ setState({iphase:'intervene'}); }
-function iReset(){ var f=freshInquiry(); state.iphase=f.iphase; state.isel=f.isel; state.iplaced=f.iplaced; state.ishake=f.ishake; state.iresults=f.iresults; state.ihint=f.ihint; state.ireflect=f.ireflect; render(); }
+function iReset(){ var f=freshInquiry(activeScenario()); state.iphase=f.iphase; state.isel=f.isel; state.iplaced=f.iplaced; state.ishake=f.ishake; state.iresults=f.iresults; state.ihint=f.ihint; state.ireflect=f.ireflect; render(); }
 function iChoose(id){ var sc=activeScenario(); if(!sc) return; var a=sc.actions.filter(function(x){return x.id===id;})[0]; if(!a) return;
   if(state.iresults[id]==='correct') return;
   if(a.ok){ state.iresults[id]='correct'; state.ihint=null; } else { state.iresults[id]='wrong'; state.ihint=id; } render(); }
@@ -344,30 +364,37 @@ function onField(token,val){ var f=state.form;
   else if(token==='title') f.title=val;
   else if(token==='subtitle') f.subtitle=val;
   else if(token==='cue') f.interveneCue=val;
+  else if(token==='lev') f.leverageCue=val;
+  else if(token.indexOf('c-')===0){ var c=token.split('-'); f.causes[+c[1]][c[2]]=val; }
   else if(token.indexOf('n-')===0){ var p=token.split('-'); f[p[1]][p[2]]=val; }
   else if(token.indexOf('a-')===0){ var q=token.split('-'); f.actions[+q[1]][q[2]]=val; }
   refreshPreview(); }
 function setActOk(i,ok){ state.form.actions[i].ok=ok; renderActions(); refreshPreview(); }
 function addAction(){ state.form.actions.push({icon:'',name:'',ok:true,hint:''}); renderActions(); refreshPreview(); }
 function removeAction(i){ state.form.actions.splice(i,1); renderActions(); refreshPreview(); }
+function addCause(){ if(state.form.causes.length>=3) return; state.form.causes.push({icon:'',name:''}); renderCauses(); refreshPreview(); }
+function removeCause(i){ if(state.form.causes.length<=1) return; state.form.causes.splice(i,1); renderCauses(); refreshPreview(); }
 
 function buildFromForm(id){ var f=state.form;
   var rn=(f.result.name||'').trim();
   var cue=(f.interveneCue||'').trim() || (rn ? rn+'(으)로 이어지지 않게 — 고리를 끊을 방법을 모두 찾아보세요.' : '고리를 끊을 방법을 모두 찾아보세요.');
-  return { id:id,
-    subject:(f.subject||'기타').trim()||'기타',
-    title:(f.title||'제목 없는 고리').trim()||'제목 없는 고리',
-    subtitle:(f.subtitle||'').trim(),
-    interveneCue:cue,
-    elements:[ {id:'cause',icon:(f.cause.icon||'⬤').trim()||'⬤',name:(f.cause.name||'원인').trim()||'원인'},
-               {id:'proc',icon:(f.proc.icon||'⬤').trim()||'⬤',name:(f.proc.name||'과정').trim()||'과정'},
-               {id:'result',icon:(f.result.icon||'⬤').trim()||'⬤',name:(f.result.name||'결과').trim()||'결과'} ],
+  var causeEls=f.causes.filter(function(c){return (c.name||'').trim();}).map(function(c,i){
+    return { id:(i===0?'cause':'cause'+(i+1)), icon:(c.icon||'⬤').trim()||'⬤', name:c.name.trim() }; });
+  if(!causeEls.length) causeEls=[{id:'cause',icon:'⬤',name:'원인'}];
+  var els=causeEls.concat([
+    {id:'proc',icon:(f.proc.icon||'⬤').trim()||'⬤',name:(f.proc.name||'과정').trim()||'과정'},
+    {id:'result',icon:(f.result.icon||'⬤').trim()||'⬤',name:(f.result.name||'결과').trim()||'결과'} ]);
+  var out={ id:id, subject:(f.subject||'기타').trim()||'기타', title:(f.title||'제목 없는 고리').trim()||'제목 없는 고리', subtitle:(f.subtitle||'').trim(),
+    interveneCue:cue, elements:els,
     actions:f.actions.filter(function(a){return (a.name||'').trim();}).map(function(a,i){
-      var o={id:'a'+i,icon:(a.icon||'•').trim()||'•',name:a.name.trim(),ok:!!a.ok}; if(!a.ok) o.hint=(a.hint||'').trim(); return o; }) }; }
+      var o={id:'a'+i,icon:(a.icon||'•').trim()||'•',name:a.name.trim(),ok:!!a.ok}; if(!a.ok) o.hint=(a.hint||'').trim(); return o; }) };
+  if((f.leverageCue||'').trim()) out.leverageCue=f.leverageCue.trim();
+  return out; }
 
 function validate(){ var f=state.form;
   if(!(f.title||'').trim()) return '주제명을 입력해 주세요.';
-  if(!(f.cause.name||'').trim() || !(f.proc.name||'').trim() || !(f.result.name||'').trim()) return '원인·과정·결과 세 마디의 이름을 모두 입력해 주세요.';
+  var namedCauses=f.causes.filter(function(c){return (c.name||'').trim();});
+  if(!namedCauses.length || !(f.proc.name||'').trim() || !(f.result.name||'').trim()) return '원인·과정·결과의 이름을 입력해 주세요. (원인은 최소 1개)';
   var named=f.actions.filter(function(a){return (a.name||'').trim();});
   if(named.filter(function(a){return a.ok;}).length<1) return '고리를 끊는 정답 카드를 최소 1개 이상 추가해 주세요.';
   return null; }
@@ -381,12 +408,14 @@ function saveForm(){ var err=validate(); if(err){ state.error=err; refreshPrevie
   state.custom=custom; persistCustom();
   setState({screen:'gallery', error:null}); showToast('‘'+sc.title+'’ 저장 완료'); }
 function playForm(){ var err=validate(); if(err){ state.error=err; refreshPreview(); return; }
-  var f=freshInquiry(); state.screen='inquiry'; state.preview=buildFromForm('preview'); state.activeId=null; state.error=null;
+  var pv=buildFromForm('preview'); var f=freshInquiry(pv); state.screen='inquiry'; state.preview=pv; state.activeId=null; state.error=null;
   state.iphase=f.iphase; state.isel=f.isel; state.iplaced=f.iplaced; state.ishake=f.ishake; state.iresults=f.iresults; state.ihint=f.ihint; state.ireflect=f.ireflect; render(); }
 function exportForm(){ var err=validate(); if(err){ state.error=err; refreshPreview(); return; } download(buildFromForm('export')); }
 function exportScenario(id){ var s=byId(id); if(s) download(s); }
 function download(obj){
-  var clean={ subject:obj.subject, title:obj.title, subtitle:obj.subtitle, interveneCue:obj.interveneCue, elements:obj.elements, actions:obj.actions };
+  var clean={ subject:obj.subject, title:obj.title, subtitle:obj.subtitle, interveneCue:obj.interveneCue };
+  if(obj.leverageCue) clean.leverageCue=obj.leverageCue;
+  clean.elements=obj.elements; clean.actions=obj.actions;
   var blob=new Blob([JSON.stringify(clean,null,2)],{type:'application/json'});
   var url=URL.createObjectURL(blob); var a=document.createElement('a');
   a.href=url; a.download=(obj.title||'scenario').replace(/\s+/g,'_')+'.json';
@@ -395,14 +424,19 @@ function download(obj){
 function normalize(o){
   if(!o || typeof o!=='object') throw new Error('bad');
   var els=Array.isArray(o.elements)?o.elements:[];
+  var causeEls=els.filter(function(e){return roleOf(e.id)==='cause';});
   var find=function(r){ return els.filter(function(e){return e.id===r;})[0]||{}; };
-  var cause=find('cause'), proc=find('proc'), result=find('result');
-  if(!cause.name && !proc.name && !result.name && !o.title) throw new Error('bad');
+  var proc=find('proc'), result=find('result');
+  if(!causeEls.length && !proc.name && !result.name && !o.title) throw new Error('bad');
+  if(!causeEls.length) causeEls=[{icon:'⬤',name:'원인'}];
+  var outCauses=causeEls.slice(0,3).map(function(c,i){ return { id:(i===0?'cause':'cause'+(i+1)), icon:c.icon||'⬤', name:c.name||'원인' }; });
   var acts=Array.isArray(o.actions)?o.actions:[];
-  return { id:'cust_'+Date.now(), subject:o.subject||'기타', title:o.title||'불러온 고리', subtitle:o.subtitle||'',
+  var out={ id:'cust_'+Date.now(), subject:o.subject||'기타', title:o.title||'불러온 고리', subtitle:o.subtitle||'',
     interveneCue:o.interveneCue||'고리를 끊을 방법을 모두 찾아보세요.',
-    elements:[ {id:'cause',icon:cause.icon||'⬤',name:cause.name||'원인'},{id:'proc',icon:proc.icon||'⬤',name:proc.name||'과정'},{id:'result',icon:result.icon||'⬤',name:result.name||'결과'} ],
-    actions:acts.map(function(a,i){ var o2={id:'a'+i,icon:a.icon||'•',name:a.name||('행동'+(i+1)),ok:!!a.ok}; if(!a.ok) o2.hint=a.hint||''; return o2; }) }; }
+    elements:outCauses.concat([{id:'proc',icon:proc.icon||'⬤',name:proc.name||'과정'},{id:'result',icon:result.icon||'⬤',name:result.name||'결과'}]),
+    actions:acts.map(function(a,i){ var o2={id:'a'+i,icon:a.icon||'•',name:a.name||('행동'+(i+1)),ok:!!a.ok}; if(!a.ok) o2.hint=a.hint||''; return o2; }) };
+  if((o.leverageCue||'').trim()) out.leverageCue=o.leverageCue.trim();
+  return out; }
 function onImport(e){
   var file=e.target&&e.target.files&&e.target.files[0]; if(!file) return;
   var reader=new FileReader();
@@ -495,29 +529,39 @@ function inquiryHTML(){
 
 function buildBodyHTML(sc){
   var anchor=state.buildMode==='anchor';
-  var placedIds=[state.iplaced['원인'],state.iplaced['과정'],state.iplaced['결과']];
+  var slots=slotsOf(sc);
+  var causes=causesOf(sc); var multi=causes.length>1;
+  var placedIds=slots.map(function(s){ return state.iplaced[s.id]; });
   var prompt = anchor
-    ? '출발점(원인)은 놓여 있어요.<br>과정과 결과 카드를 순서대로 놓아 고리를 완성하세요.'
-    : '흩어진 카드를 순서대로 놓아<br>인과 고리(원인 → 과정 → 결과)를 세워 보세요.';
+    ? (multi ? '여러 원인은 놓여 있어요.<br>과정과 결과 카드를 놓아 고리를 완성하세요.'
+             : '출발점(원인)은 놓여 있어요.<br>과정과 결과 카드를 순서대로 놓아 고리를 완성하세요.')
+    : (multi ? '흩어진 카드를 놓아 인과 고리를 세워 보세요.<br>여러 원인이 한 결과로 모여요.'
+             : '흩어진 카드를 순서대로 놓아<br>인과 고리(원인 → 과정 → 결과)를 세워 보세요.');
 
-  var slots=SLOTS.map(function(sl,i){
-    var id=state.iplaced[sl.role]; var el=id?elOf(sc,id):null; var filled=!!el;
-    var anchored=anchor && sl.role==='원인';
-    var shake=state.ishake===sl.role;
+  function slotHTML(s){
+    var id=state.iplaced[s.id]; var el=id?elOf(sc,id):null; var filled=!!el;
+    var anchored=anchor && s.role==='cause';
+    var shake=state.ishake===s.id;
     var inner;
     if(filled){
       inner='<div class="circle filled'+(shake?' shake':'')+'">'+esc(el.icon)+'</div>'
-        +(anchored?'<span class="anchor-tag">출발점</span>':'')
+        +(anchored?'<span class="anchor-tag">'+(multi?'원인':'출발점')+'</span>':'')
         +'<span class="name">'+esc(el.name)+'</span>';
     } else {
-      inner='<div class="circle empty'+(shake?' shake':'')+'">'+esc(sl.role)+'</div><span class="lab">여기에 놓기</span>';
+      inner='<div class="circle empty'+(shake?' shake':'')+'">'+esc(s.label)+'</div><span class="lab">여기에 놓기</span>';
     }
-    var interactive = !filled;
-    var attrs = interactive ? ' data-act="iplace" data-role="'+esc(sl.role)+'" role="button" tabindex="0"' : '';
-    var slot='<div class="slot'+(interactive?'':' locked')+'"'+attrs+'>'+inner+'</div>';
-    var arrow = i<SLOTS.length-1 ? '<div class="arrow">→</div>' : '';
-    return '<div class="slot-wrap">'+slot+arrow+'</div>';
-  }).join('');
+    var interactive=!filled;
+    var attrs=interactive?' data-act="iplace" data-slot="'+esc(s.id)+'" role="button" tabindex="0"':'';
+    return '<div class="slot'+(interactive?'':' locked')+'"'+attrs+'>'+inner+'</div>';
+  }
+
+  var causeSlots=slots.filter(function(s){return s.role==='cause';});
+  var procSlot=slots.filter(function(s){return s.role==='proc';})[0];
+  var resultSlot=slots.filter(function(s){return s.role==='result';})[0];
+  var chain='<div class="chain">'
+    +'<div class="cause-col">'+causeSlots.map(slotHTML).join('')+'</div>'
+    +'<div class="arrow">→</div>'+slotHTML(procSlot)
+    +'<div class="arrow">→</div>'+slotHTML(resultSlot)+'</div>';
 
   var tray=sc.elements.filter(function(e){ return placedIds.indexOf(e.id)<0; }).map(function(e){
     var sel=state.isel===e.id;
@@ -525,20 +569,20 @@ function buildBodyHTML(sc){
       +'<span class="ic">'+esc(e.icon)+'</span><span class="nm">'+esc(e.name)+'</span></div>';
   }).join('');
 
-  var allPlaced=SLOTS.every(function(sl){return state.iplaced[sl.role];});
+  var allPlaced=slots.every(function(s){return state.iplaced[s.id];});
   var done = allPlaced ? '<div class="build-done"><div class="msg">고리가 완성되었습니다.</div>'
     +'<button class="btn primary" style="font-size:19px;padding:13px 30px" data-act="intervene">개입 지점 찾기 →</button></div>' : '';
 
   return '<div style="display:flex;flex-direction:column;gap:30px">'
     +'<div class="cue">'+prompt+'</div>'
-    +'<div class="chain">'+slots+'</div>'
+    +chain
     +'<div class="tray-zone"><div class="tray-help">카드를 탭한 뒤, 위의 자리를 탭하세요</div>'
     +'<div class="tray">'+tray+'</div></div>'
     +done+'</div>';
 }
 
 function interveneBodyHTML(sc){
-  var cause=elOf(sc,'cause'), proc=elOf(sc,'proc'), result=elOf(sc,'result');
+  var causes=causesOf(sc), proc=elOf(sc,'proc'), result=elOf(sc,'result');
   var bc=0; for(var k in state.iresults){ if(state.iresults[k]==='correct') bc++; }
   var tc=sc.actions.filter(function(a){return a.ok;}).length;
   var allFound = tc>0 && bc===tc;
@@ -550,8 +594,10 @@ function interveneBodyHTML(sc){
     ? '<div class="gatewrap broken"><div class="base"></div><div class="gate"></div><div class="gate-tag">차단</div></div>'
     : '<div class="gatewrap"><div class="base"></div></div>';
 
-  var flow='<div class="flow">'
-    +'<div class="fnode"><div class="fcircle">'+esc(cause.icon)+'</div><span class="fname">'+esc(cause.name)+'</span></div>'
+  var causeNodes='<div class="cause-col">'+causes.map(function(c){
+    return '<div class="fnode"><div class="fcircle">'+esc(c.icon)+'</div><span class="fname">'+esc(c.name)+'</span></div>';
+  }).join('')+'</div>';
+  var flow='<div class="flow">'+causeNodes
     +'<div class="flink"></div>'
     +'<div class="fnode"><div class="fcircle">'+esc(proc.icon)+'</div><span class="fname">'+esc(proc.name)+'</span></div>'
     +gate
@@ -575,7 +621,7 @@ function interveneBodyHTML(sc){
 
   var reflect='<div class="reflect">'
     +'<label class="reflect-label" for="cce-reflect">🧠 내 생각 <span class="opt">(선택)</span></label>'
-    +'<div class="reflect-cue">왜 이 지점을 끊으면 결과가 바뀔까요? 내가 생각한 또 다른 끊는 방법도 좋아요.</div>'
+    +'<div class="reflect-cue">'+esc(sc.leverageCue||'왜 이 지점을 끊으면 결과가 바뀔까요? 내가 생각한 또 다른 끊는 방법도 좋아요.')+'</div>'
     +'<textarea id="cce-reflect" class="reflect-area" data-field="reflect" rows="3" placeholder="여기에 내 생각을 적어 보세요">'+esc(state.ireflect)+'</textarea>'
     +'<div class="reflect-help">이름 대신 ‘나’라고 적어요 · 적은 내용은 저장되지 않아요.</div></div>';
 
@@ -589,7 +635,7 @@ function interveneBodyHTML(sc){
 
 function editorHTML(){
   var f=state.form;
-  var nodes=[['cause','원인','예: 감기 바이러스','🦠'],['proc','과정','예: 기침·재채기','🤧'],['result','결과','예: 친구도 감염','🤒']].map(function(n){
+  var procResult=[['proc','과정','예: 기침·재채기','🤧'],['result','결과','예: 친구도 감염','🤒']].map(function(n){
     return '<div class="node-row">'
       +'<div class="fld">'+n[1]+'<input class="icon-input" data-field="n-'+n[0]+'-icon" value="'+esc(f[n[0]].icon)+'" placeholder="'+esc(n[3])+'"></div>'
       +'<label class="fld grow">이름<input data-field="n-'+n[0]+'-name" value="'+esc(f[n[0]].name)+'" placeholder="'+esc(n[2])+'"></label></div>';
@@ -606,9 +652,14 @@ function editorHTML(){
     +'<label class="fld" style="flex:3 1 220px">주제명<input data-field="title" value="'+esc(f.title)+'" placeholder="예: 감기 고리"></label></div>'
     +'<label class="fld">부제<input data-field="subtitle" value="'+esc(f.subtitle)+'" placeholder="예: 호흡기 감염"></label></div>'
 
-    +'<div class="fieldset"><div class="fs-title">고리의 세 마디</div>'+nodes
+    +'<div class="fieldset"><div class="fs-title">고리의 마디 — 원인(최대 3) · 과정 · 결과</div>'
+    +'<div id="cce-causelist">'+causesHTML()+'</div>'
+    +'<button class="add-btn" data-act="addcause">＋ 원인 추가</button>'
+    +procResult
     +'<label class="fld">개입 질문 <span style="color:var(--faint2)">(비우면 자동 생성)</span>'
-    +'<input data-field="cue" value="'+esc(f.interveneCue)+'" placeholder="예: 바이러스가 친구에게 옮겨가지 못하게 막을 방법을 모두 골라 보세요."></label></div>'
+    +'<input data-field="cue" value="'+esc(f.interveneCue)+'" placeholder="예: 바이러스가 친구에게 옮겨가지 못하게 막을 방법을 모두 골라 보세요."></label>'
+    +'<label class="fld">지렛대 질문 <span style="color:var(--faint2)">(선택 · 여러 원인일 때 성찰 프롬프트)</span>'
+    +'<input data-field="lev" value="'+esc(f.leverageCue)+'" placeholder="예: 하나만 막을까요, 셋이 지나는 길목을 막을까요?"></label></div>'
 
     +'<div class="fieldset"><div class="fs-title-row"><div class="fs-title">행동 카드</div><div class="fs-note">정답(고리를 끊음) · 함정(오개념)</div></div>'
     +'<div id="cce-actionlist">'+actionsHTML()+'</div>'
@@ -620,6 +671,17 @@ function editorHTML(){
     +'<p class="note">내보낸 JSON 파일을 동료 교사와 공유하거나, ‘JSON 불러오기’로 다시 가져와 어디서든 같은 도구를 쓸 수 있어요.</p></div></div></div></main>';
 }
 
+function causesHTML(){
+  var multi=state.form.causes.length>1;
+  return state.form.causes.map(function(c,i){
+    var canRemove=state.form.causes.length>1;
+    return '<div class="node-row">'
+      +'<div class="fld">원인'+(multi?(i+1):'')+'<input class="icon-input" data-field="c-'+i+'-icon" value="'+esc(c.icon)+'" placeholder="🦠"></div>'
+      +'<label class="fld grow">이름<input data-field="c-'+i+'-name" value="'+esc(c.name)+'" placeholder="예: 감기 바이러스"></label>'
+      +(canRemove?'<button class="icon-btn danger" title="원인 삭제" data-act="removecause" data-i="'+i+'" style="align-self:flex-end">✕</button>':'')
+      +'</div>';
+  }).join('');
+}
 function actionsHTML(){
   return state.form.actions.map(function(a,i){
     var ok=!!a.ok;
@@ -641,10 +703,11 @@ function previewInnerHTML(){
   var ok=f.actions.filter(function(a){return a.ok && (a.name||'').trim();}).length;
   var trap=f.actions.filter(function(a){return !a.ok && (a.name||'').trim();}).length;
   var err=state.error?'<div class="err">'+esc(state.error)+'</div>':'';
+  var causeNodes=f.causes.map(function(c){ return '<div class="pv-node"><div class="pv-circle">'+esc(c.icon)+'</div><span class="pv-name">'+esc(c.name)+'</span></div>'; }).join('');
   return '<div class="fs-title">미리보기</div>'
     +'<div class="pv-title">'+esc(title)+' <span class="sub">'+esc(f.subtitle)+'</span></div>'
     +'<div class="pv-chain">'
-    +'<div class="pv-node"><div class="pv-circle">'+esc(f.cause.icon)+'</div><span class="pv-name">'+esc(f.cause.name)+'</span></div>'
+    +'<div class="pv-cause-col">'+causeNodes+'</div>'
     +'<div class="pv-link"></div>'
     +'<div class="pv-node"><div class="pv-circle">'+esc(f.proc.icon)+'</div><span class="pv-name">'+esc(f.proc.name)+'</span></div>'
     +'<div class="pv-link"><span class="sc">✂️</span></div>'
@@ -657,6 +720,7 @@ function previewInnerHTML(){
 // 에디터 입력 중 포커스 유지를 위해 전체 재렌더 대신 미리보기/행동목록만 갱신
 function refreshPreview(){ var el=document.getElementById('cce-preview'); if(el) el.innerHTML=previewInnerHTML(); }
 function renderActions(){ var el=document.getElementById('cce-actionlist'); if(el) el.innerHTML=actionsHTML(); }
+function renderCauses(){ var el=document.getElementById('cce-causelist'); if(el) el.innerHTML=causesHTML(); }
 
 // ---- 이벤트 위임 ----
 var ACTS={
@@ -664,15 +728,16 @@ var ACTS={
   setmode:function(d){ state.buildMode=d.mode; persistMode(); render(); },
   play:function(d){ openScenario(d.id); }, edit:function(d){ editScenario(d.id); },
   remove:function(d){ deleteCustom(d.id); }, exportsc:function(d){ exportScenario(d.id); },
-  iselect:function(d){ iSelect(d.id); }, iplace:function(d){ iPlace(d.role); }, ichoose:function(d){ iChoose(d.id); },
+  iselect:function(d){ iSelect(d.id); }, iplace:function(d){ iPlace(d.slot); }, ichoose:function(d){ iChoose(d.id); },
   intervene:iGoIntervene, ireset:iReset,
   addaction:addAction, removeaction:function(d){ removeAction(d.i); }, setok:function(d){ setActOk(d.i,true); }, settrap:function(d){ setActOk(d.i,false); },
+  addcause:addCause, removecause:function(d){ removeCause(d.i); },
   saveform:saveForm, playform:playForm, exportform:exportForm
 };
 $app.addEventListener('click',function(e){
   var t=e.target.closest('[data-act]'); if(!t) return;
   var act=t.getAttribute('data-act'); var fn=ACTS[act]; if(!fn) return;  // import 등은 ACTS에 없음 → change로 처리
-  fn({ id:t.getAttribute('data-id'), role:t.getAttribute('data-role'), mode:t.getAttribute('data-mode'),
+  fn({ id:t.getAttribute('data-id'), role:t.getAttribute('data-role'), slot:t.getAttribute('data-slot'), mode:t.getAttribute('data-mode'),
        i:t.getAttribute('data-i')!=null?+t.getAttribute('data-i'):undefined });
 });
 $app.addEventListener('keydown',function(e){
